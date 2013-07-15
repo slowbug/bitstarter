@@ -26,6 +26,7 @@ var program = require('commander');
 var cheerio = require('cheerio');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var TEMPHTML =  "temphtml.html";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -34,6 +35,17 @@ var assertFileExists = function(infile) {
         process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
     }
     return instr;
+};
+
+var assertUrlValid = function(remoteURL) {
+    var validator = require('validator');
+    try {
+		validator.check(remoteURL).isUrl();
+    } catch (e) {
+		console.log("%s.  Exiting.", e.message);
+		process.exit(1);
+    }
+    return remoteURL;
 };
 
 var cheerioHtmlFile = function(htmlfile) {
@@ -62,13 +74,28 @@ var clone = function(fn) {
 };
 
 if(require.main == module) {
+	var checkJson;
+	var outJson;
+	
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL to remote file', clone(assertUrlValid))
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+	if (program.url) {
+		var rest = require('restler');
+		rest.get(program.url).on('complete', function(remoteURLhtml){
+			fs.writeFileSync(TEMPHTML, remoteURLhtml);
+			console.log(remoteURLhtml);
+			checkJson = checkHtmlFile(TEMPHTML, program.checks);
+			outJson = JSON.stringify(checkJson, null, 4);
+			console.log(outJson);
+        });
+	} else {
+		checkJson = checkHtmlFile(program.file, program.checks);
+		outJson = JSON.stringify(checkJson, null, 4);
+		console.log(outJson);
+	}
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
